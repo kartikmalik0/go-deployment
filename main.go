@@ -7,7 +7,7 @@ import (
 )
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintln(w, "Hello from Go server V1!")
+    fmt.Fprintln(w, "Hello from Go server V2!")
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
