@@ -1,0 +1,81 @@
+name: Build & Deploy Go Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Download dependencies
+        run: go mod tidy
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Cross-compile for Linux (amd64)
+        run: GOOS=linux GOARCH=amd64 go build -o server .
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-server-binary
+          path: server
+          retention-days: 7
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: go-server-binary
+
+      - name: Make binary executable
+        run: chmod +x server
+
+      - name: Copy binary to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: server
+          target: /home/ubuntu/go-deployment/
+
+      - name: Restart service on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo systemctl restart goapp
+            sleep 3
+            sudo systemctl is-active --quiet goapp || exit 1
+            echo "✅ Deployment successful"
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health)
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ Health check failed (HTTP $STATUS)"
+              exit 1
+            fi
+            echo "✅ Health check passed"
