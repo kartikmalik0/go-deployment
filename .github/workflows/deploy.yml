@@ -2,7 +2,7 @@ name: Build & Deploy Go Server
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
